@@ -68,7 +68,7 @@ private:
     std::condition_variable _condition;
     std::mutex _mutex;
     TrafficLightPhase _currentPhase;
-	std::shared_ptr<message_queue<traffic_light_phase>> _msgqueue;
+	std::shared_ptr<MessageQueue<TrafficLightPhase>> _msgqueue;
 
 };
 
