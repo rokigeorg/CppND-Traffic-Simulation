@@ -3,6 +3,10 @@
 #include <iostream>
 #include <random>
 
+#include <cstdlib>
+#include <ctime>
+#include <iostream>
+
 #include "TrafficLight.h"
 #include <future>
 #include <queue>
@@ -49,16 +53,17 @@ void TrafficLight::waitForGreen() {
   // returns.
 
   while (true) {
-    /* Sleep at every iteration to reduce CPU usage */
+
     std::this_thread::sleep_for(std::chrono::milliseconds(1));
 
-    /* Wait until the traffic light is green, received from message queue */
     TrafficLightPhase curr_phase = _msgqueue->receive();
+
+    std::unique_lock<std::mutex> lck(_mutex);
+    std::cout << "Traffic_Light Numb: " << _id
+              << "waitForGreen Phaes received = " << curr_phase << std::endl;
+    lck.unlock();
+
     if (curr_phase == green) {
-      std::unique_lock<std::mutex> lck(_mutex);
-      std::cout << "Traffic_Light #" << _id
-                << "WaitForGreen Phaes received = " << curr_phase << std::endl;
-      lck.unlock();
       return;
     }
   }
@@ -75,6 +80,8 @@ void TrafficLight::simulate() {
   threads.emplace_back(std::thread(&TrafficLight::cycleThroughPhases, this));
 }
 
+static int randNum(int min, int max) { return rand() % max + min; }
+
 // virtual function which is executed in a thread
 void TrafficLight::cycleThroughPhases() {
   // FP.2a : Implement the function with an infinite loop that measures the time
@@ -84,50 +91,35 @@ void TrafficLight::cycleThroughPhases() {
   // seconds. Also, the while-loop should use std::this_thread::sleep_for to
   // wait 1ms between two cycles.
 
-  /* Init our random generation between 4 and 6 seconds */
-  std::random_device rd;
-  std::mt19937 eng(rd());
-  std::uniform_int_distribution<> distr(4, 6);
-
   /* Print id of the current thread */
   std::unique_lock<std::mutex> lck(_mutex);
-  std::cout << "Traffic_Light #" << _id
-            << "::Cycle_Through_Phases: thread id = "
+  std::cout << "Traffic_Light Numb: " << _id
+            << "in cycleThroughPhases with thread id = "
             << std::this_thread::get_id() << std::endl;
   lck.unlock();
 
-  /* Initalize variables */
-  int cycle_duration = distr(eng); // Duration of a single simulation cycle in
-                                   // seconds, is randomly chosen
-
+  int duration = randNum(4, 6); // seconds, is randomly chosen
   std::chrono::system_clock::time_point t1 = std::chrono::system_clock::now();
 
   while (true) {
-    /* Compute time difference to stop watch */
-    long time_since_last_update =
-        std::chrono::duration_cast<std::chrono::seconds>(
-            std::chrono::system_clock::now() - t1)
-            .count();
+    // Get time difference to stop
+    long time_diff = std::chrono::duration_cast<std::chrono::seconds>(
+                         std::chrono::system_clock::now() - t1)
+                         .count();
 
-    // simulate some work
     std::this_thread::sleep_for(std::chrono::milliseconds(1));
 
-    if (time_since_last_update >= cycle_duration) {
+    if (time_diff >= duration) {
       _currentPhase = _currentPhase == red ? TrafficLightPhase::green
                                            : TrafficLightPhase::red;
 
-      // create message
       auto msg = _currentPhase;
       auto isSend =
           std::async(std::launch::async, &MessageQueue<TrafficLightPhase>::send,
                      _msgqueue, std::move(msg));
       isSend.wait();
-
-      // update stop watch
       t1 = std::chrono::system_clock::now();
-
-      /* Randomly choose the cycle duration for the next cycle */
-      cycle_duration = distr(eng);
+      duration = randNum(4, 6);
     }
   }
 }
